@@ -1,9 +1,10 @@
 -- flock
--- an experiment in ABM for Norns.
+-- an experiment in ABM
+-- for Norns.
 --
 
--- TODO: distance function for x and y wrap-arounds.
--- TODO: target only turns right?
+engine.name = 'PolyPerc'
+
 
 local met
 birds = {}
@@ -363,6 +364,10 @@ function run()
   
   crow_update()
   redraw()
+  
+  if birds[1].avoiding == 1 then
+    engine.hz(220 + birds[1].py)
+  end
   
   tick = tick + 1
 end
