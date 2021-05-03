@@ -3,10 +3,26 @@
 -- for Norns.
 --
 
-engine.name = 'PolyPerc'
+engine.name = 'Glut'
 
 
 local met
+
+local g = grid.connect(1)
+
+VOICES = 4
+
+local positions = {}
+local gates = {}
+local voice_levels = {}
+
+for i=1, VOICES do
+  positions[i] = -1
+  gates[i] = 0
+  voice_levels[i] = 0
+end
+
+
 birds = {}
 
 WIDTH = 64
@@ -24,14 +40,15 @@ MAX_TURN_AVOID_POINT = 3.0
 MAX_TURN_TARGET = 2.0
 
 tick = 0
+p_index = 1
 
 function should_print(bird)
   return bird.id == 1 and tick % 10 == 0 --and bird.avoiding == 2
 end
 
 --- draw functions
-function draw_bird(bird)
-  screen.level(10)
+function draw_bird(bird, lvl)
+  screen.level(lvl)
   screen.pixel(bird.px, math.floor(HEIGHT - bird.py))
   screen.fill()
 end
@@ -54,6 +71,35 @@ function init()
     }
   end
   
+  params:add_separator("params")
+  params:add{
+    type="number", id="align", min=0, max=500, default=200,
+    action=function(x) MAX_TURN_ALIGN = x / 100 end
+  }
+  params:add{
+    type="number", id="cohere", min=0, max=500, default=300,
+    action=function(x) MAX_TURN_COHERE = x / 100 end
+  }
+  params:add{
+    type="number", id="avoid", min=0, max=500, default=150,
+    action=function(x) MAX_TURN_AVOID = x / 100 end
+  }
+  params:add{
+    type="number", id="avoid_point", min=0, max=500, default=300,
+    action=function(x) MAX_TURN_AVOID_POINT = x / 100 end
+  }
+  params:add{
+    type="number", id="target", min=0, max=500, default=200,
+    action=function(x) MAX_TURN_TARGET = x / 100 end
+  }
+  
+  params:add_separator("load samples")
+  local sep = ":"
+  for i = 1, VOICES do
+    params:add_file(i .. "sample", i .. sep .. "sample")
+    params:set_action(i .. "sample", function(file) engine.read(i, file) end)
+  end
+  
   redraw()
   run()
   
@@ -64,7 +110,7 @@ function crow_init()
   for i = 1, 3 do
     crow.output[i].slew = 0.1
   end
-  crow.output[4].slew = 0.0
+  crow.output[4].slew = 0.01
 end
 
 
@@ -271,7 +317,6 @@ end
 
 
 function calculate(bird)
-  --local neighbor = closest_agent(bird, birds)
   local flock = flockmates(bird, birds, SIGHT)
   local too_close = flockmates(bird, birds, FEAR)
   -- avoid?
@@ -365,8 +410,13 @@ function run()
   crow_update()
   redraw()
   
-  if birds[1].avoiding == 1 then
-    engine.hz(220 + birds[1].py)
+  for i = 1, VOICES do
+    if birds[i].avoiding == 1 then
+      start_voice(i, birds[i].heading / (2 * math.pi))
+      --engine.hz(220 + birds[1].py)
+    elseif birds[i].avoiding == 0 then
+      stop_voice(i)
+    end
   end
   
   tick = tick + 1
@@ -375,7 +425,11 @@ end
 function redraw()
   screen.clear()
   for i = 1, NUM_AGENTS do
-    draw_bird(birds[i])
+    local lvl = 3
+    if i <= VOICES then
+      lvl = 15
+    end
+    draw_bird(birds[i], lvl)
   end
   
   screen.move(birds[1].px, HEIGHT - birds[1].py)
@@ -384,24 +438,59 @@ function redraw()
   screen.line(xx, yy)
   screen.stroke()
   
-  -- bird 1 update
   screen.move(70, 10)
-  screen.level(10)
+  screen.text("avoid " .. params:get("avoid"))
   
-  screen.text("px " .. birds[1].px)
   screen.move(70, 20)
-  screen.text("py " .. birds[1].py)
+  screen.text("align " .. params:get("align"))
+  
   screen.move(70, 30)
-  screen.text("hd " .. birds[1].heading)
+  screen.text("cohere " .. params:get("cohere"))
+  
   screen.move(70, 40)
-  screen.text("av " .. birds[1].avoiding)
-  screen.move(70, 50)
-  local n = flockmates(birds[1], birds, SIGHT)
-  screen.text("n " .. n["n"])
+  screen.text("target " .. params:get("target"))
+  
+  screen.rect(66, -3 + 10 * p_index, 2, 2)
   
   screen.update()
 end
 
 function enc(n, d)
-  print(n, d)
+  --print(n, d)
+  local opts = 4
+  if n == 2 then
+    p_index = p_index + d
+    if p_index > opts then
+      p_index = p_index - opts
+    elseif p_index < 1 then
+      p_index = p_index + opts
+    end
+  end
+  
+  if n == 3 then
+    if p_index == 1 then
+      params:delta("avoid", d)
+    elseif p_index == 2 then
+      params:delta("align", d)
+    elseif p_index == 3 then
+      params:delta("cohere", d)
+    elseif p_index == 4 then
+      params:delta("target", d)
+    end
+  end
+  
+end
+
+
+---- Engine stuff
+function start_voice(voice, pos)
+  engine.seek(voice, pos)
+  engine.gate(voice, 1)
+  gates[voice] = 1
+end
+
+
+function stop_voice(voice)
+  gates[voice] = 0
+  engine.gate(voice, 0)
 end
