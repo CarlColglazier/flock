@@ -1,5 +1,7 @@
 # Flock
 
+![](./assets/preview.jpg)
+
 Computer algorithms can model flocking behavior by simulating three steps:
 
 1. Separation
