@@ -28,7 +28,7 @@ birds = {}
 WIDTH = 64
 HEIGHT = 64
 
-NUM_AGENTS = 25
+NUM_AGENTS = 20
 
 FEAR = 2
 SIGHT = 8
@@ -41,6 +41,8 @@ MAX_TURN_TARGET = 2.0
 
 tick = 0
 p_index = 1
+target_x = 0
+target_y = 0
 
 function should_print(bird)
   return bird.id == 1 and tick % 10 == 0 --and bird.avoiding == 2
@@ -91,6 +93,16 @@ function init()
   params:add{
     type="number", id="target", min=0, max=500, default=200,
     action=function(x) MAX_TURN_TARGET = x / 100 end
+  }
+  
+  params:add{
+    type="number", id="target_x", min=1, max=64, default=32,
+    action=function(x) target_x = x end
+  }
+  
+  params:add{
+    type="number", id="target_y", min=1, max=64, default=32,
+    action=function(x) target_y = x end
   }
   
   params:add_separator("load samples")
@@ -333,7 +345,7 @@ function calculate(bird)
     bird.avoiding = 1
     bird_avoid_birds(bird, too_close)
   elseif flock["n"] > 0 then
-    bird_target_point(bird, 32.0, 32.0)
+    bird_target_point(bird, target_x, target_y)
     bird_align(bird, flock)
     bird_cohere(bird, flock)
   end
@@ -393,6 +405,14 @@ function crow_update()
   crow.output[4].volts = 5.0 * birds[1].avoiding
 end
 
+function ansible_update()
+  for i = 1, 4 do
+    crow.ii.ansible.trigger(i, birds[i].avoiding)
+    local cv = 5.0 * math.abs(birds[i].heading - math.pi) / math.pi
+    crow.ii.ansible.cv(i, cv)
+  end
+end
+
 
 function run()
   for i = 1, NUM_AGENTS do
@@ -408,6 +428,7 @@ function run()
   end
   
   crow_update()
+  ansible_update()
   redraw()
   
   for i = 1, VOICES do
@@ -450,6 +471,12 @@ function redraw()
   screen.move(70, 40)
   screen.text("target " .. params:get("target"))
   
+  screen.move(70, 50)
+  screen.text("t_x " .. params:get("target_x"))
+  
+  screen.move(70, 60)
+  screen.text("t_y " .. params:get("target_y"))
+  
   screen.rect(66, -3 + 10 * p_index, 2, 2)
   
   screen.update()
@@ -457,7 +484,7 @@ end
 
 function enc(n, d)
   --print(n, d)
-  local opts = 4
+  local opts = 6
   if n == 2 then
     p_index = p_index + d
     if p_index > opts then
@@ -476,6 +503,10 @@ function enc(n, d)
       params:delta("cohere", d)
     elseif p_index == 4 then
       params:delta("target", d)
+    elseif p_index == 5 then
+      params:delta("target_x", d)
+    elseif p_index == 6 then
+      params:delta("target_y", d)
     end
   end
   
@@ -494,3 +525,9 @@ function stop_voice(voice)
   gates[voice] = 0
   engine.gate(voice, 0)
 end
+
+-- ansible stuff. 
+crow.ii.ansible.event = function( e, data )
+  print("ansible event:", e, data)
+end
+
